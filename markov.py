@@ -122,9 +122,9 @@ def textChain(ngrams, beginners, charLimit):
 # Processes all the novels in the cleaned folder
 txt = processData("mystery-novels\cleaned")
 
-# Defaults to generate one trigram with a 140 caracter limit
+# Defaults to generate one trigram with a 280 caracter limit
 ngramCount = 3
-charLimit = 140
+charLimit = 280
 trials = 1
 
 # Gets the number of arguments recieved
@@ -147,11 +147,12 @@ ngrams, beginners = markovChainWords(txt, ngramCount)
 #for i in range(trials):
 	# Generate and print the text
 	#print textChain(ngrams, beginners, charLimit)
+	#print ""
 
-# Uncomment this to post results to Twitter
+# Uncomment this section to post results to Twitter
 while True:
 	## Runs the text generator chain and prints the tweet
  	text = textChain(ngrams, beginners, charLimit)
  	api.update_status(text)
- 	time.sleep(600)#Tweet every 10 minutes
+ 	time.sleep(300) #Tweets every x seconds
 	

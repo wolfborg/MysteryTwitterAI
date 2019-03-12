@@ -1,85 +1,157 @@
 # Mystery Twitter AI - markov.py
+# Derek Chaplin
 
 # Overall goal: A Twitter bot which will generate tweets by forming sentences using mystery novel text files as its reference data.
-# First goal: Generate sentences with a Markov chain
 
 # Markov Chains
 # InitialState * Probabilites = NextState
 
-#############################################################################################
-# UPDATE 3/21/17
-# Currently:
-#	1. Converts a text file into a list of words.
-#	2. Create a dictionary of ngrams, holds the frequency of following words.
-#	3. Also collects a list of words that start sentences.
-# 	4. Generates a string <= 140 characters using a random beginning word and a
-#		 random next word based on the ngrams dictionary.
+# Need tweepy installed if you want to 
+
+import random, time, sys, os
+
+# Uncomment for Twitter posting
+import tweepy
+from keys import *
 #
-# To-Do:
-#	Allow variable amount of ngrams to be looked at.
-#	Prevent open/close quote confusions.
-#	End sentence at a period but don't end for Dr., Mr., so on.
-#	Bad word filter so I don't accidentally end up expelled.
-#	Integrate Twitter API to post tweets every x amount of time.
-#############################################################################################
+# Also must have a file keys.py which has the following API info:
+#	CONSUMER_KEY
+#	CONSUMER_SECRET
+#	ACCESS_KEY
+#	ACCESS_SECRET
+auth = tweepy.OAuthHandler(CONSUMER_KEY, CONSUMER_SECRET)
+auth.set_access_token(ACCESS_KEY, ACCESS_SECRET)
+api = tweepy.API(auth)
 
-import random
-
-# Parameters: filename - a txt file in the "mystery-novels" directory
-def processNovel(filename):
-	f = open("mystery-novels/" + filename, 'r')
+# Imports the list of bad words for the bot to ignore
+def importBadWords():
+	f = open('badwords.txt', 'r')
 	result = []
-	
+	for line in f:
+		result.append(line)
+	return result
+
+# Reads the text files within a given directory
+def processData(foldername):
+	result = []
+	for file in os.listdir(foldername):
+		if file.endswith(".txt"):
+			result.extend(processNovel(os.path.join(foldername, file)))
+	return result
+
+# Adds each word to a big list of words from every processed novel
+def processNovel(filename):
+	f = open(filename, 'r')
+	result = []	
 	for line in f:
 		words = line.split(' ')
 		for word in words:
 			# Removes newlines, tabs, and fixes quotes and apostrophes
 			word = word.strip('\n')
 			word = word.strip('\t')
+			word = word.replace('\xe2\x80\x98', "'")
 			word = word.replace('\xe2\x80\x99', "'")
-			word = word.replace('\xe2\x80\x9d', '"')
-			word = word.replace('\xe2\x80\x9c', '"')
+			word = word.replace('\xe2\x80\x9d', "")
+			word = word.replace('\xe2\x80\x9c', "")
+			word = word.replace('_', "")
+			word = word.replace('(', "")
+			word = word.replace(')', "")
+			word = word.replace('"', "")
 			result.append(word)
 	return result
 
-# Parameters: txt - a list of words to use for data
-def textChain(txt):
+# Returns [] of beginners and {} of ngrams
+def markovChainWords(txt, ngramCount):
 	ngrams = {}
 	beginners = []
 	count = 0
-
+	badwords = importBadWords()
+	endingpunctuations = ['.', '!', '?']
+	abbreviations = ['Mr.','Mrs.','Dr.','A.M.','P.M.']
 	# Creates the ngrams dictionary
 	for word in txt:
-		if count < len(txt)-1:
+		if word in badwords:
+			continue
+
+		# If the count doesn't go over the number of words
+		if count < len(txt)-ngramCount:
+			# If we don't have the word already
 			if word not in ngrams:
+				# Add it to the dictionary
 				ngrams[word] = []
-			ngrams[word].append(txt[count+1])
-			if word.istitle():
+			# Append to key the next ngrams
+			nextngram = ""
+			for i in range(1,ngramCount):
+				nextngram += (txt[count+i])
+				if i != ngramCount-1:
+					nextngram += " "
+			ngrams[word].append(nextngram)
+			if word.istitle() and word[-1] not in endingpunctuations:
 				beginners.append(word)
 		count += 1
 
+	return [ngrams, beginners]
+
+# Returns the resulting Markov chain string
+def textChain(ngrams, beginners, charLimit):
+	endingpunctuations = ['.', '!', '?']
+	abbreviations = ['Mr.','Mrs.','Dr.','A.M.','P.M.']
+
 	current = random.choice(beginners)
 	result = current
-
-	# Runs until the next word exceeds 140 characters
-	# To-Do: Change this so it ends at a word with a period.
-	# Possible To-Do: More than once sentence?
-	while True:
+	# Runs until the last word has an ending punctuation.
+	while result[-1] not in endingpunctuations:
 		next = random.choice(ngrams[current])
-		if len(result + " " + next) > 140:
-			break
+		if len(result + " " + next) > charLimit:
+			words = result.split(' ')
+			if result[-1] in endingpunctuations and words[-1] not in abbreviations:
+				return result
+			current = random.choice(beginners)
+			result = current
+			next = random.choice(ngrams[current])
 		result += " " + next
-		current = next
+		current = next.split(' ')
+		current = current[-1]
 
-	#print ngrams
+	words = result.split(' ')
+	if words[-1] in abbreviations:
+		result = textChain(ngrams, beginners, charLimit)
+
 	return result
 
-# Small example text to reference: The Gettysburg Address
-#txt = '''Four score and seven years ago our fathers brought forth on this continent, a new nation, conceived in Liberty, and dedicated to the proposition that all men are created equal. Now we are engaged in a great civil war, testing whether that nation, or any nation so conceived and so dedicated, can long endure. We are met on a great battle-field of that war. We have come to dedicate a portion of that field, as a final resting place for those who here gave their lives that that nation might live. It is altogether fitting and proper that we should do this. But, in a larger sense, we can not dedicate -- we can not consecrate -- we can not hallow -- this ground. The brave men, living and dead, who struggled here, have consecrated it, far above our poor power to add or detract. The world will little note, nor long remember what we say here, but it can never forget what they did here. It is for us the living, rather, to be dedicated here to the unfinished work which they who fought here have thus far so nobly advanced. It is rather for us to be here dedicated to the great task remaining before us -- that from these honored dead we take increased devotion to that cause for which they gave the last full measure of devotion -- that we here highly resolve that these dead shall not have died in vain -- that this nation, under God, shall have a new birth of freedom -- and that government of the people, by the people, for the people, shall not perish from the earth.'''
+# Processes all the novels in the cleaned folder
+txt = processData("mystery-novels\cleaned")
 
-# Big example text to reference: After Dark
-txt = processNovel("after-dark.txt")
+# Defaults to generate one trigram with a 140 caracter limit
+ngramCount = 3
+charLimit = 140
+trials = 1
 
-# Runs the text generator chain and prints the tweet
-print textChain(txt)
+# Gets the number of arguments recieved
+args = len(sys.argv)
+# First argument sets the number of ngrams to use
+if args > 1:
+	ngramCount = int(sys.argv[1])
+# Second argument sets the character limit to use for the generated text
+if args > 2:
+	charLimit = int(sys.argv[2])
+# Third argument sets the number of trials
+if args > 3:
+	trials = int(sys.argv[3])
+
+# Creates the Markov chain dictionary
+ngrams, beginners = markovChainWords(txt, ngramCount)
+
+# Comment this out if you're running the Twitter bot
+# Runs for the number of trials specified
+#for i in range(trials):
+	# Generate and print the text
+	#print textChain(ngrams, beginners, charLimit)
+
+# Uncomment this to post results to Twitter
+while True:
+	## Runs the text generator chain and prints the tweet
+ 	text = textChain(ngrams, beginners, charLimit)
+ 	api.update_status(text)
+ 	time.sleep(600)#Tweet every 10 minutes
 	
